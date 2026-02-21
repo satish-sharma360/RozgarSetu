@@ -39,4 +39,6 @@ const reviewSchema = new Schema<IReview>(
   { timestamps: true }
 );
 
+reviewSchema.index({ job: 1, reviewer: 1 }, { unique: true });
+
 export default mongoose.model<IReview>("Review", reviewSchema);

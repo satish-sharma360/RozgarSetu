@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import mongoose from "mongoose";
-import Database from "./utils/database.ts";
-import { App } from "./app.ts";
+import Database from "./utils/database.js";
+import { App } from "./app.js";
 
 dotenv.config();
 
