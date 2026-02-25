@@ -13,23 +13,6 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <header className="w-full bg-white shadow">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-white font-bold">RZ</div>
-            <div>
-              <h1 className="text-lg font-semibold">RozgarSetu</h1>
-              <p className="text-xs text-gray-500">Connecting contractors and local workers</p>
-            </div>
-          </div>
-
-          <div className="space-x-3 flex">
-            <Button content="Log in" path="login" active={true} />
-            <Button content="Sign up" path="signup" active={false} />
-          </div>
-        </div>
-      </header>
 
       {/* Hero */}
       <main className="flex-1 bg-gradient-to-b from-gray-50 to-white">

@@ -10,15 +10,16 @@ export enum JobStatus {
 
 export interface IJob extends Document {
   contractor: mongoose.Types.ObjectId;
-  worker: mongoose.Types.ObjectId | null; // ✅ allow null
+  worker: mongoose.Types.ObjectId | null; 
   title: string;
   description: string;
   location: {
-    type: "Point"; // ✅ strict type
-    coordinates: [number, number]; // ✅ fixed tuple
+    type: "Point"; 
+    coordinates: [number, number]; 
   };
   budget: number;
   status: JobStatus;
+  requests: mongoose.Types.ObjectId[];
 }
 
 const jobSchema = new Schema<IJob>(
@@ -61,7 +62,14 @@ const jobSchema = new Schema<IJob>(
       type: String,
       enum: Object.values(JobStatus),
       default: JobStatus.PENDING
-    }
+    },
+    requests: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+        default: []
+      }
+    ]
   },
   { timestamps: true }
 );

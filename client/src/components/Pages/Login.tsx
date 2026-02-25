@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import InputBox from '../core/InputBox'
+import { UserContext } from '../../context/UserContext'
 
 type Role = 'worker' | 'contractor'
 
@@ -12,6 +13,14 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
+  const { login, user } = useContext(UserContext)!;
+
+  React.useEffect(() => {
+    if (user) {
+      navigate(user.role === 'worker' ? '/dashboard/worker' : '/dashboard/contractor');
+    }
+  }, [user, navigate]);
+
   const handleLogin = async () => {
     if (!email || !password) {
       setError('Please fill all fields')
@@ -22,27 +31,12 @@ export default function Login() {
     setError('')
 
     try {
-      const res = await fetch('http://localhost:5000/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      })
+      const userData = await login({ email, password })
 
-      const data = await res.json()
-
-      if (!res.ok) {
-        setError(data.message || 'Login failed')
-        return
-      }
-
-      // Save token and user data
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('user', JSON.stringify(data.data))
-
-      // Redirect based on role
-      navigate(role === 'worker' ? '/dashboard/worker' : '/dashboard/contractor')
-    } catch (err) {
-      setError('Network error. Please try again.')
+      // Redirect based on real role returned from the server
+      navigate(userData.role === 'worker' ? '/dashboard/worker' : '/dashboard/contractor')
+    } catch (err: any) {
+      setError(err?.message || 'Login failed')
     } finally {
       setLoading(false)
     }

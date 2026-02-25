@@ -92,8 +92,6 @@ const UserSchema = new Schema<IUser>(
 
 UserSchema.index({ location: "2dsphere" });
 
-// we export the model as a named constant rather than a default export
 export const User = mongoose.model<IUser>("User", UserSchema);
 
-// keep default export for compatibility if something else imports it
 export default User;

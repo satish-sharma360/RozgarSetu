@@ -2,13 +2,26 @@ import { Request, Response } from "express";
 import jobModel, { JobStatus } from "../models/job.model.js";
 import User from "../models/user.model.js";
 import JobService from "../services/job.service.js";
-import mongoose from "mongoose";
+import mongoose, { Schema, model, Types } from "mongoose";
+
+export interface IJob {
+  title: string;
+  description: string;
+  location: {
+    type: "Point";
+    coordinates: [number, number];
+  };
+  budget: number;
+  contractor: Types.ObjectId;
+  worker?: Types.ObjectId;
+  status: JobStatus;
+  requests: Types.ObjectId[];
+}
 
 class JobControllers {
   public static async createJob(req: Request, res: Response) {
     try {
       const contractorId = req.user?.id;
-      console.log("User from token:", req.user);
 
       if (!contractorId) {
         return res.status(401).json({ message: "Unauthorized" });
@@ -59,7 +72,9 @@ class JobControllers {
 
       const allJobs = await jobModel
         .find({ contractor: contractorId })
-        .populate("worker", "name skills isAvailable");
+        .populate("worker", "name skills isAvailable rating profileImage")
+        .populate("contractor", "name")
+        .sort({ createdAt: -1 });
 
       return res
         .status(200)
@@ -70,7 +85,161 @@ class JobControllers {
     }
   }
 
-  public static async assignWorker(req: Request<{ jobId: string }>, res: Response) {
+  public static async getAvailableJobs(req: Request, res: Response) {
+    try {
+      const jobs = await jobModel
+        .find({ status: JobStatus.PENDING })
+        .populate("contractor", "name profileImage")
+        .sort({ createdAt: -1 });
+
+      return res.status(200).json({ success: true, jobs });
+    } catch (error) {
+      console.error("Get Available Jobs Error:", error);
+      return res.status(500).json({ message: "Internal Server Error" });
+    }
+  }
+
+  public static async getAssignedJobs(req: Request, res: Response) {
+    try {
+      const workerId = req.user?.id;
+
+      if (!workerId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const allJobs = await jobModel
+        .find({ worker: workerId })
+        .populate("contractor", "name profileImage")
+        .sort({ createdAt: -1 });
+
+      return res.status(200).json({ success: true, allJobs });
+    } catch (error) {
+      console.error("Get Assigned Jobs Error:", error);
+      return res.status(500).json({ message: "Internal Server Error" });
+    }
+  }
+
+  public static async requestJob(req: Request, res: Response) {
+    try {
+      const workerId = req.user?.id;
+      const { jobId } = req.params;
+
+      if (!workerId) return res.status(401).json({ message: "Unauthorized" });
+
+      if (!jobId || Array.isArray(jobId))
+        return res.status(400).json({ message: "Invalid Job ID" });
+
+      if (!mongoose.Types.ObjectId.isValid(jobId))
+        return res.status(400).json({ message: "Invalid Job ID" });
+
+      const job = await jobModel.findOne({
+        _id: jobId,
+        status: JobStatus.PENDING,
+      });
+
+      if (!job)
+        return res
+          .status(404)
+          .json({ message: "Job not found or no longer available" });
+
+      const alreadyRequested = job.requests?.some(
+        (id) => id.toString() === workerId,
+      );
+
+      if (alreadyRequested)
+        return res
+          .status(400)
+          .json({ message: "You already requested this job" });
+
+      job.requests = job.requests || [];
+      job.requests.push(new mongoose.Types.ObjectId(workerId));
+
+      await job.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Request sent successfully",
+      });
+    } catch (error) {
+      console.error("Request Job Error:", error);
+      return res.status(500).json({ message: "Internal Server Error" });
+    }
+  }
+
+  public static async cancelRequest(req: Request, res: Response) {
+    try {
+      const workerId = req.user?.id;
+      const { jobId } = req.params;
+
+      if (!workerId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const job = await jobModel.findById(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+
+      job.requests = (job.requests || []).filter(
+        (id: mongoose.Types.ObjectId) => id.toString() !== workerId,
+      );
+      await job.save();
+
+      return res
+        .status(200)
+        .json({ success: true, message: "Request withdrawn" });
+    } catch (error) {
+      console.error("Cancel Request Error:", error);
+      return res.status(500).json({ message: "Internal Server Error" });
+    }
+  }
+
+  public static async getJobRequests(req: Request, res: Response) {
+    try {
+      const contractorId = req.user?.id;
+      const { jobId } = req.params;
+
+      if (!jobId || Array.isArray(jobId))
+        return res.status(400).json({ message: "Invalid Job ID" });
+
+      if (!mongoose.Types.ObjectId.isValid(jobId))
+        return res.status(400).json({ message: "Invalid Job ID" });
+
+
+      if (!contractorId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+
+      if (!mongoose.Types.ObjectId.isValid(jobId)) {
+        return res.status(400).json({ message: "Invalid Job ID" });
+      }
+
+      const job = await jobModel
+        .findOne({
+          _id: new mongoose.Types.ObjectId(jobId),
+          contractor: new mongoose.Types.ObjectId(contractorId),
+        })
+        .populate(
+          "requests",
+          "name email skills rating totalReviews profileImage isAvailable location",
+        );
+
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      return res
+        .status(200)
+        .json({ success: true, requests: job.requests || [] });
+    } catch (error) {
+      console.error("Get Job Requests Error:", error);
+      return res.status(500).json({ message: "Internal Server Error" });
+    }
+  }
+
+  public static async assignWorker(
+    req: Request<{ jobId: string }>,
+    res: Response,
+  ) {
     try {
       const contractorId = req.user?.id;
       const { jobId } = req.params;
@@ -107,7 +276,8 @@ class JobControllers {
       }
 
       job.worker = new mongoose.Types.ObjectId(workerId);
-      job.status = JobStatus.ACCEPTED; // ✅ FIXED
+      job.status = JobStatus.ACCEPTED; 
+      job.requests = []
 
       await job.save();
       return res.status(200).json({
@@ -118,7 +288,11 @@ class JobControllers {
       return res.status(500).json({ message: "Internal Server Error" });
     }
   }
-  public static async updateJobStatus(req: Request<{ jobId: string }>, res: Response) {
+
+  public static async updateJobStatus(
+    req: Request<{ jobId: string }>,
+    res: Response,
+  ) {
     try {
       const workerId = req.user?.id;
       const { jobId } = req.params;
@@ -219,12 +393,20 @@ class JobControllers {
         return res.status(400).json({ message: "Invalid Job ID" });
       }
 
-      const job = await jobModel.findById(jobIdStr).populate("worker", "location");
+      const job = await jobModel
+        .findById(jobIdStr)
+        .populate("worker", "location");
       if (!job) return res.status(404).json({ message: "Job not found" });
 
       // ensure requester is the assigned worker
-      if (!job.worker || (job.worker as any)._id?.toString() !== workerId && job.worker.toString() !== workerId) {
-        return res.status(403).json({ message: "Only assigned worker can request route" });
+      if (
+        !job.worker ||
+        ((job.worker as any)._id?.toString() !== workerId &&
+          job.worker.toString() !== workerId)
+      ) {
+        return res
+          .status(403)
+          .json({ message: "Only assigned worker can request route" });
       }
 
       // get worker location
@@ -234,8 +416,15 @@ class JobControllers {
         workerLoc = workerDoc?.location;
       }
 
-      if (!workerLoc || !workerLoc.coordinates || !job.location || !job.location.coordinates) {
-        return res.status(400).json({ message: "Missing coordinates for route calculation" });
+      if (
+        !workerLoc ||
+        !workerLoc.coordinates ||
+        !job.location ||
+        !job.location.coordinates
+      ) {
+        return res
+          .status(400)
+          .json({ message: "Missing coordinates for route calculation" });
       }
 
       const [jobLng, jobLat] = job.location.coordinates;
@@ -257,9 +446,16 @@ class JobControllers {
 
       // Normalize geometry: if OSRM returns MultiLineString, merge into single LineString
       let geometry = route.geometry as any;
-      if (geometry && geometry.type === "MultiLineString" && Array.isArray(geometry.coordinates)) {
+      if (
+        geometry &&
+        geometry.type === "MultiLineString" &&
+        Array.isArray(geometry.coordinates)
+      ) {
         // flatten array of lines into single array of coords
-        const flatCoords = geometry.coordinates.reduce((acc: any[], part: any[]) => acc.concat(part), []);
+        const flatCoords = geometry.coordinates.reduce(
+          (acc: any[], part: any[]) => acc.concat(part),
+          [],
+        );
         geometry = { type: "LineString", coordinates: flatCoords };
       }
 
